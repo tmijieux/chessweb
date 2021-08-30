@@ -1,0 +1,1855 @@
+<!doctype HTML>
+<html lang="fr">
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <meta name="description" content="Jouez au échecs à deux sur le même écran"/>
+    <meta charset="utf-8">
+    <title>Jeu d'échec</title>
+  </head>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    body,html {
+      margin: 0;
+      height: 100%;
+      position: relative;
+    }
+    body {
+      display: flex;
+      flex-direction: row;
+      align-items: center;
+      justify-content: center;
+    }
+    #names {
+      width: 0;
+      height: 80vmin;
+      position: relative;
+    }
+    #board {
+      width: 80vmin;
+      height: 80vmin;
+      border: 1px solid #000;
+      display: flex;
+      flex-direction: row;
+      flex-wrap: wrap;
+    }
+    #board > .square {
+      width: 12.5%;
+      height: 12.5%;
+      position: relative;
+    }
+    .player-name {
+      height: 40px;
+      width: 200px;
+      border: 1px solid #000;
+      position: absolute;
+      left: 0;
+    }
+    .player-name.bottom {
+      bottom: calc(-40px - 10px);
+    }
+    .player-name.top {
+      top: calc(-40px - 10px);
+    }
+    #info {
+      width: calc((100% - 80vmin)/2 - 20px);
+      border: 1px solid #000;
+      margin-left: 10px;
+      height: 80vmin;
+      position: absolute;
+      right: 10px;
+      top: 10vmin;
+      overflow: auto;
+    }
+    #info .moveHistory {
+      /* display: flex; */
+      /* flex-direction: column; */
+    }
+    .moveHistory tr {
+      width: 100%;
+    }
+    .moveHistory tr td {
+      width: 33%;
+    }
+    .square.hovered { border: 1px solid #000 }
+    .square.hovered * { pointer-events: none }
+    .label {
+      position: absolute;
+    }
+    * {
+      -moz-user-select: -moz-none;
+      -khtml-user-select: none;
+      -webkit-user-select: none;
+      -ms-user-select: none;
+      user-select: none;
+    }
+    .label.column {
+      bottom: 5px;
+      right: 5px;
+    }
+    .label.row {
+      left: 5px;
+      top: 5px;
+    }
+    .square.black { background-color: #999999; }
+    /* .square.white { background-color: #FAFAFA; } */
+    .square.white { background-color: #F1F1F1; }
+
+    .piece {
+      top: 0;
+      left: 0;
+      position: relative;
+      height: 100%;
+      width: 100%;
+      background-repeat: no-repeat;
+      background-position: center;
+      background-size: 95% 95%;
+      pointer-events: none;
+    }
+    .piece.white.pawn { background-image: url("icons/pawn-white.svg") }
+    .piece.white.rook { background-image: url("icons/rook-white.svg") }
+    .piece.white.knight { background-image: url("icons/knight-white.svg") }
+    .piece.white.bishop { background-image: url("icons/bishop-white.svg") }
+    .piece.white.king { background-image: url("icons/king-white.svg") }
+    .piece.white.queen { background-image: url("icons/queen-white.svg") }
+    .piece.black.pawn { background-image: url("icons/pawn-black.svg") }
+    .piece.black.rook { background-image: url("icons/rook-black.svg") }
+    .piece.black.knight { background-image: url("icons/knight-black.svg") }
+    .piece.black.bishop { background-image: url("icons/bishop-black.svg") }
+    .piece.black.king { background-image: url("icons/king-black.svg") }
+    .piece.black.queen { background-image: url("icons/queen-black.svg") }
+    .piece.draggablec { pointer-events: initial; }
+    .piece.dragged {  z-index: 1000; pointer-events: none; }
+    .pawn-promote-dialog {
+      position: absolute;
+      display: flex;
+      flex-direction: column;
+      background-color: #fff;
+      left: 0;
+      z-index: 1000;
+      width: 100%;
+      height: 400%;
+      border: 7px solid #000;
+    }
+    .pawn-promote-dialog.top { top: 0 }
+    .pawn-promote-dialog.bottom { bottom: 0; flex-direction: column-reverse }
+
+    .pawn-promote-dialog .piece {
+      pointer-events: initial;
+    }
+
+    .draggablec { cursor: grab; }
+    .grabbing { cursor: grabbing; }
+
+    #button { position: absolute; top: 10px; left: 10px }
+    .attacked {
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 100%;
+      width: 100%;
+      background-color: rgba(255,0,0,0.1);
+    }
+    .position-dot {
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 100%;
+      width: 100%;
+      border-radius: 50%;
+      transform-origin: center;
+      transform: scale(0.5);
+      background-color: rgba(200,200,200,0.5);
+      pointer-events: none;
+    }
+    .position-cross {
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 100%;
+      width: 100%;
+      pointer-events: none;
+    }
+    .position-cross::before,
+    .position-cross::after {
+      bottom: calc(50% - 10px);
+      left: 0;
+      position: absolute;
+      content: '';
+      width: 100%;
+      height: 20px;
+      transform-origin: center;
+      transform: scale(0.5);
+      background-color: rgba(200,0,0,0.5);
+      pointer-events: none;
+    }
+    .position-cross::before{
+      transform: rotate(45deg);
+    }
+    .position-cross::after {
+      transform: rotate(-45deg);
+    }
+
+
+  </style>
+  <body>
+    <div id="button">
+      <button onclick="q.swapBoard()">Retourner le plateau</button>
+      <br>
+      <button onclick="q.reinitBoard()">Réinitialiser le plateau</button>
+      <br>
+      <button onmousedown="q.showSquareAttackedBy('white')"
+              onmouseup="q.hideAttack()"
+              onmouseout="q.hideAttack()">
+        Afficher les cases attaqué par les blancs
+      </button>
+      <br>
+      <button onmousedown="q.showSquareAttackedBy('black')"
+              onmouseup="q.hideAttack()"
+              onmouseout="q.hideAttack()">
+        Afficher les cases attaqué par les noirs
+      </button>
+      <br>
+      <button onmousedown="q.showSquareAttackedByBoth()"
+              onmouseup="q.hideAttack()"
+              onmouseout="q.hideAttack()">
+        Afficher les cases attaqué par les deux
+      </button>
+      <br>
+      <button onclick="q.exportHistoryPgnFile()">Sauvegardez la partie</button>
+      <br>
+      <button onclick="q.openPgnFile()">Charger une partie</button>
+    </div>
+    <div id="names">
+      <div class="top player-name"></div>
+      <div class="bottom player-name"></div>
+    </div>
+    <div id="board">
+    </div>
+    <div id="info">
+      <p class="colorToPlay"></p>
+      <table class="moveHistory"></table>
+    </div>
+    <script>
+      const q = (function(){
+      "use strict";
+
+      function throttle(func, wait, leading, trailing, context)
+      {
+        let ctx, args, result
+        let timeout = null
+        let previous = 0;
+        const later = function() {
+          previous = new Date
+          timeout = null
+          result = func.apply(ctx, args)
+        }
+        return function(ev)
+        {
+          const now = new Date;
+          if (!previous && !leading) {
+            previous = now
+          }
+          const remaining = wait - (now - previous)
+          ctx = context || this;
+          args = arguments;
+          // Si la période d'attente est écoulée
+          if (remaining <= 0) {
+            // Réinitialiser les compteurs
+            clearTimeout(timeout);
+            timeout = null;
+            // Enregistrer le moment du dernier appel
+            previous = now;
+            // Appeler la fonction
+            result = func.apply(ctx, args);
+          } else if (!timeout && trailing) {
+            // Sinon on s’endort pendant le temps restant
+            timeout = setTimeout(later, remaining);
+          }
+          return result
+        }
+      }
+
+      const dragImg = document.createElement("img")
+      dragImg.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+
+      function setupPieceDragEventsListeners(piece, dragState, boardState)
+      {
+        piece.addEventListener("dragstart", function(ev) {
+          // ev.stopPropagation()
+          ev.dataTransfer.effectAllowed = "move"
+          ev.dataTransfer.dropEffect = "none"
+          ev.dataTransfer.setData("chess-piece", "dummy")
+          ev.dataTransfer.setDragImage(dragImg, 0, 0)
+
+          const square = piece.parentNode
+          const pos = {
+            y: Number(square.getAttribute("data-row")),
+            x: Number(square.getAttribute("data-col")),
+          }
+          dragState.color = piece.classList.contains("white") ? "white": "black"
+          dragState.sourceSquare = square
+          dragState.sourcePiece = piece
+          dragState.sourcePos = pos
+          dragState.rect = square.getBoundingClientRect()
+          dragState.effect = "none"
+
+          setTimeout(function() {
+            // setTimeout because modifying DOM in chrome
+            // during dragstart handler
+            // will cancel the drag immediately
+            piece.classList.add("dragged")
+            showAuthorizedMovesFor(boardState, pos)
+          }, 0)
+        })
+
+        piece.addEventListener("dragend", function(ev) {
+          ev.stopPropagation()
+          ev.preventDefault()
+
+          dragState.sourceSquare = null
+          dragState.sourcePos = null
+          dragState.sourcePiece = null
+          dragState.rect = null
+          dragState.effect = "none"
+
+          piece.classList.remove("dragged")
+          piece.style.top=""
+          piece.style.left=""
+          hideAuthorizedPosition()
+        })
+      }
+
+      function setupSquareDragEventsListeners(square, dragState, boardState)
+      {
+        const x = Number(square.getAttribute("data-col"))
+        const y = Number(square.getAttribute("data-row"))
+        const dst = {x,y}
+
+        // ------------ ---------
+        // ------ ENTER SQUARE
+        // ------------ ---------
+
+        square.addEventListener("dragenter", function(ev) {
+          ev.stopPropagation()
+          ev.preventDefault()
+          square.classList.add("hovered")
+          const canMove = canMovePiece(boardState, dragState.sourcePos, dst)
+          dragState.effect = canMove ? "move" : "none"
+          ev.dataTransfer.dropEffect = dragState.effect
+        })
+
+        // ------------ ---------
+        // ------ LEAVE SQUARE
+        // ------------ ---------
+
+        square.addEventListener("dragleave", function(ev) {
+          ev.stopPropagation()
+          ev.preventDefault()
+          square.classList.remove("hovered")
+        })
+
+        // ------------ ---------
+        // ------ OVER  SQUARE
+        // ------------ ---------
+        const updatePos = throttle((ev, dragState) => {
+          const rect = dragState.rect
+          const x = ev.clientX - rect.left
+          const y = ev.clientY - rect.top
+          const piece = dragState.sourcePiece
+          piece.style.left = "calc("+x+"px - 50%)"
+          piece.style.top = "calc("+y+"px - 50%)"
+        }, 30, true)
+
+        square.addEventListener("dragover", function(ev) {
+          ev.stopPropagation()
+          ev.preventDefault()
+          ev.dataTransfer.dropEffect = dragState.effect
+          setTimeout(() => updatePos(ev, dragState), 0)
+        })
+
+        function showPromoteDialogIfRequired() {
+          if (shouldPresentPromoteDialog(boardState, dragState.sourcePos, dst)) {
+            return new Promise(function(resolve, reject) {
+
+              const pieces = document.body.querySelectorAll(".piece")
+              for (const p of pieces) {
+                // disable all piece by making them not draggable
+                p.classList.remove("draggablec")
+              }
+              const dialog = document.createElement("div")
+              dialog.classList.add("pawn-promote-dialog")
+              dialog.classList.add(dst.y === 0 ? "bottom": "top")
+
+              for (const type of ["queen","rook","bishop","knight"]) {
+                const piece = document.createElement("div")
+                piece.classList.add("piece", dragState.color, type)
+
+                piece.addEventListener("click", function() {
+                  dialog.remove()
+                  resolve(type)
+                })
+                dialog.append(piece)
+              }
+              square.append(dialog);
+            })
+          } else {
+            return Promise.resolve(null)
+          }
+        }
+
+        // ------------ ---------
+        // ------ DROP IN SQUARE
+        // ------------ ---------
+        square.addEventListener("drop", function(ev) {
+          ev.preventDefault()
+          if (ev.dataTransfer.getData("chess-piece") !== "dummy") {
+            return
+          }
+
+          square.classList.remove("hovered")
+          const src = dragState.sourcePos
+
+          showPromoteDialogIfRequired()
+            .then(promote => {
+              const move = {src, dst, promote}
+              const uiMoves = movePiece(boardState, move)
+              updatePieceDraggability(boardState)
+
+              for (const [srcId, dstId, promote, type] of uiMoves) {
+                const src = document.getElementById(srcId)
+                const dst = document.getElementById(dstId)
+                const oldPiece = dst.querySelector(".piece")
+                if (oldPiece !== null) {
+                  dst.removeChild(oldPiece)
+                }
+                const piece = src.querySelector(".piece")
+                if (promote) {
+                  piece.classList.remove("pawn")
+                  piece.classList.add(type)
+                }
+                dst.appendChild(piece)
+              }
+              updateBoardInformation(boardState)
+
+              if (boardState.finished) {
+                window.alert(boardState.Termination)
+              }
+            })
+        })
+      }
+
+      function Direction(x, y, d, options) {
+        options = {
+          mustTake:false,
+          cannotTake:false,
+          castleOnly:false,
+          ...options
+        }
+        return {x,y,d,...options}
+      }
+
+      function generateMoveDirections(pos, type, color)
+      {
+        const directions=[]
+        switch (type) {
+        case "pawn":
+          const y = (color === "white") ? 1 : -1
+          directions.push(Direction(0, y, 1, {cannotTake:true}),
+                          Direction(1, y, 1, {mustTake:true}),
+                          Direction(-1, y, 1, {mustTake:true}))
+          if ((color === "white" && pos.y === 1)
+              || (color === "black" && pos.y === 6)) {
+            directions.shift()
+            directions.push(Direction(0, y, 2, {cannotTake:true}))
+          }
+          break
+        case "king":
+        case "queen":
+          const d = type === "king" ? 1 : 8
+          directions.push(Direction(0, 1, d),
+                          Direction(0, -1, d),
+                          Direction(1, 1, d),
+                          Direction(1, 0, d),
+                          Direction(1, -1, d),
+                          Direction(-1, -1, d),
+                          Direction(-1, 0, d),
+                          Direction(-1, 1, d))
+          if (type === "king" && (pos.y === 0 || pos.y === 7)) {
+            directions.push(Direction(2, 0, 1, {cannotTake: true, castleOnly:true}))
+            directions.push(Direction(-2, 0, 1, {cannotTake: true, castleOnly:true}))
+          }
+          break
+        case "rook":
+          directions.push(Direction(0, 1, 8),
+                          Direction(0, -1, 8),
+                          Direction(1, 0, 8),
+                          Direction(-1, 0, 8))
+          break
+        case "bishop":
+          directions.push(Direction(1, 1, 8),
+                          Direction(1, -1, 8),
+                          Direction(-1, -1, 8),
+                          Direction(-1, 1, 8))
+          break
+        case "knight":
+          directions.push(Direction(1, 2, 1),
+                          Direction(2, 1, 1),
+                          Direction(1, -2, 1),
+                          Direction(2, -1, 1),
+                          Direction(-1, 2, 1),
+                          Direction(-2, 1, 1),
+                          Direction(-1, -2, 1),
+                          Direction(-2, -1, 1))
+          break
+        }
+        return directions
+      }
+
+      function generateMoves(boardState, type, color, pos)
+      {
+        const directions = generateMoveDirections(pos, type, color)
+        const moves = []
+        for (const {x,y,d,mustTake,cannotTake,castleOnly} of directions) {
+          for (let dist = 1; dist <= d; ++dist) {
+            const curPos = {...pos, mustTake, cannotTake,castleOnly}
+            curPos.x = pos.x + dist * x
+            curPos.y = pos.y + dist * y
+
+            if (curPos.x < 0 || curPos.x > 7 || curPos.y < 0 || curPos.y > 7) {
+              // out of board bounds
+              break
+            }
+            const [t,c] = boardState.getElement(curPos)
+            if (t !== "empty" && c === color) { // same color
+              break
+            }
+            moves.push(curPos)
+            if (t !== "empty") {
+              break // cannot go over other pieces
+            }
+          }
+        }
+        return moves
+      }
+
+
+      function updateBoardInformation(boardState) {
+        const bottomName = document.body.querySelector(".bottom.player-name")
+        const topName = document.body.querySelector(".top.player-name")
+        const blackName = boardState.blackPlayer + " ("+T("black")+")"
+        const whiteName = boardState.whitePlayer + " ("+T("white")+")"
+        topName.innerText = whiteAtBottom ? blackName : whiteName
+        bottomName.innerText = whiteAtBottom ? whiteName : blackName
+
+
+        const colorToPlay = document.body.querySelector("#info .colorToPlay")
+        colorToPlay.innerText = boardState.nextColorToPlay+" to play"
+
+        const moveHistory = document.body.querySelector("#info .moveHistory")
+        clearAllChilds(moveHistory)
+
+        let i = 1
+        for (const q of boardState.moveHistory) {
+          var row = document.createElement("tr")
+          var number = document.createElement("td")
+          var whiteMove = document.createElement("td")
+          var blackMove  = document.createElement("td")
+
+          number.innerText = i
+          whiteMove.innerText = q[0].move
+          blackMove.innerText = q[1].move
+
+          row.appendChild(number)
+          row.appendChild(whiteMove)
+          row.appendChild(blackMove)
+          moveHistory.append(row)
+          i = i + 1
+        }
+      }
+
+      function exportHistoryPgnFile() {
+        const date = new Date;
+        const year=date.getFullYear()
+        const month = String(date.getMonth()+1).padStart(2,"0")
+        const day = String(date.getDate()).padStart(2,"0")
+
+        const headers = {
+          "Event": "test",
+          "Site": "?",
+          "Date": `${year}.${month}.${day}`,
+          "Round": "?",
+          "White": boardState.whitePlayer,
+          "Black": boardState.blackPlayer,
+          "Result": boardState.result,
+        }
+        const tagPairs = []
+        for (const [k,v] of Object.entries(headers)) {
+          tagPairs.push(`[${k} "${v}"]`)
+        }
+        const tagPairSection = tagPairs.join("\n")
+
+        const tokens = []
+        boardState.moveHistory.forEach((v, i) => {
+          tokens.push(""+(i+1))
+          tokens.push(".")
+          tokens.push(v[0].move)
+          tokens.push(v[1].move)
+        })
+        let moveTextSection = ""
+        let line = ""
+        tokens.forEach(t => {
+          const newline = line+((t===".")?"":" ")+t
+          if (newline.length > 79) {
+            moveTextSection += line.trimEnd()+"\n"
+            line = ""+t.trimStart()
+          } else {
+            line = newline
+          }
+        })
+        moveTextSection += line.trimEnd()+" "+boardState.result
+
+        const str = tagPairSection.trim()+"\n\n"+moveTextSection.trim()
+        savePgnFile(str)
+      }
+
+      function savePgnFile(data)
+      {
+        const anchor = document.createElement("a")
+        anchor.href="data:application/x-chess-pgn;base64,"+btoa(data)
+        anchor.setAttribute("download", "partie.pgn")
+        anchor.click()
+      }
+
+      function openPgnFile() {
+
+        const input = document.createElement("input")
+        input.type="file"
+        input.setAttribute("accept", ".pgn")
+        input.addEventListener("change", function() {
+          const reader = new FileReader()
+          reader.readAsText(input.files[0], "UTF-8")
+          reader.addEventListener("load", ev => {
+            loadPgnFile(ev.target.result)
+          })
+        })
+        input.click()
+      }
+
+      function isAllNumeric(str) {
+        for (let i = 0; i < str.length ; ++i ) {
+          const code = str.charCodeAt(i)
+          if (!(code > 47 && code < 58)) {
+            return false
+          }
+        }
+        return true
+      }
+
+      const symbolGlyphs = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_+#=:-"
+      function readSymbolToken(body ) {
+        let pos = 0
+        let output = ""
+        const len = body.length
+
+        while (true) {
+          const c = body.charAt(pos)
+          if (!symbolGlyphs.includes(c)) {
+            break
+          }
+          output += c
+          pos ++
+          if (pos > len)
+            break
+        }
+        return [output,pos]
+      }
+
+      function readNextString(body) {
+        let pos = 0
+        let numQuote = 0
+        let prevWasBackSlash = false
+        let output = ""
+        const len = body.length
+
+        while (numQuote != 2) {
+          const c = body.charAt(pos)
+          if (prevWasBackSlash) {
+            prevWasBackSlash = false
+            if (c === "\"" || c === "\\") {
+              output += c
+            } else {
+              throw new Error("invalid escape sequence \\"+c)
+            }
+          } else {
+            prevWasBackSlash = false
+            if (c === "\\") {
+              prevWasBackSlash = true
+            } else if (c === "\"") {
+              numQuote += 1
+            } else {
+              output += c
+            }
+          }
+          ++pos
+          if (pos > len)
+            throw new Error ("invalid string: unterminated: '"+body+"'")
+        }
+        return [output,pos]
+      }
+
+      function readComment(body) {
+        const first = body[0]
+        let output = ""
+        let last
+        if (first === ";")
+          last = "\n"
+        else if (first === "{")
+          last = "}"
+        else
+          throw new Error("Invalid start for comment: '"+first+"'")
+        const len = body.length
+
+        let i = 1
+        let c = body[i]
+        while (c !== last) {
+          output += c
+          ++i
+          c = body[i]
+          if (i > len)
+            break
+        }
+        if (last === "{" && c !== last) {
+          throw new Error("Invalid unterminated comment: '"+body+"'")
+        }
+        if (last === "}") {
+          ++i
+        }
+        return [output,i]
+      }
+
+      function tokenize(body) {
+        const tokens = []
+
+        let value,len
+        let newline = true
+        let lineCount = 0
+        let columnCount = 0
+        while (body.length) {
+          const c = body.charAt(0)
+          const code = c.charCodeAt(0)
+          len = 1
+
+          if (c === "\"") {
+            ;[value,len] = readNextString(body)
+            tokens.push({type:"string", value})
+          } else if (c.trim() == "") {
+            if (c === "\n") {
+              lineCount += 1
+              columnCount = 0
+            }
+          } else if (c === "[") {
+            tokens.push({type:"opening-bracket"})
+          } else if (c === "]") {
+            tokens.push({type:"closing-bracket"})
+          } else if (c === "*") {
+            tokens.push({type:"star"})
+          } else if (c === ".") {
+            tokens.push({type:"period"})
+          } else if (c === ";" || c === "{") {
+            ;[value,len] = readComment(body)
+            tokens.push({type:"comment", value})
+          } else if (c==="%" && newline) {
+            ;[value,len] = readEscapeExtension(body)
+            tokens.push({type:"extension", value})
+          } else if (c === "(") {
+            tokens.push({type:"opening-paren"})
+          } else if (c === ")") {
+            tokens.push({type:"closing-paren"})
+          } else if (c === "<") {
+            tokens.push({type:"opening-angle-bracket"})
+          } else if (c === ">") {
+            tokens.push({type:"closing-angle-bracket"})
+          } else if (c === "$") {
+            ;[value,len] = readNumericAnnotationGlyph(body) // not implemented
+            tokens.push({type:"NAG", value})
+          } else if ((code > 47 && code < 58) // numeric (0-9)
+                     || (code > 64 && code < 91) // upper alpha (A-Z)
+                     || (code > 96 && code < 123)) { // lower alpha (a-z)
+            ;[value,len] = readSymbolToken(body)
+            if (isAllNumeric(value)) {
+              value = Number.parseInt(value)
+              tokens.push({type:"integer", value})
+            } else {
+              tokens.push({type:"symbol", value})
+            }
+          } else {
+            throw new Error("unexpected character'"+c
+                            +"' at line "+lineCount
+                            + " column "+columnCount)
+          }
+          newline = (c === "\n")
+          if (!newline) ++columnCount
+          body = body.substring(len)
+        }
+        return tokens
+      }
+
+      /**
+       * Parse information about source square
+       * in SAN(Standard Algebric Notation).
+       *
+       * The notation must be stripped
+       * of any information that comes
+       * after the source position
+       * (the source position must appear at the end of the string)
+       */
+      function parseOptionalSource(notation, src)
+      {
+        const columns = "abcdefgh"
+        const rows = "12345678"
+
+        const len = notation.length
+        for (let k = 0; k < Math.min(2,len); ++k) {
+          const c = notation[len-1-k]
+          if (rows.includes(c)) {
+            src.y = rows.indexOf(c)
+          } else if (columns.includes(c)) {
+            src.x = columns.indexOf(c)
+          }
+        }
+      }
+
+      /**
+       * Returns (in the src object) the coordinates
+       * for the piece of searchType and searchColor
+       * that can attack the position dst according to the partial information
+       * already in src upon call of this function
+       *
+       * in the input, src may be an imcomplete position:
+       * either x,y or both may be missing (missing means value === -1)
+       *
+       * This functions assumes the information in src is enough to identify
+       * an unique piece (no ambiguity given the board current state)
+       */
+      function findSourcePositionForTypeAttackingPosition(boardState,
+                                                          searchType,
+                                                          searchColor,
+                                                          src, dst)
+      {
+        if (src.x === -1 && src.y === -1) {
+          for (let x = 0; x < 8; ++x) {
+            for (let y = 0; y < 8; ++y) {
+              const pos = {x,y}
+              const [type,color] = boardState.getElement(pos)
+              if (type !== searchType || color !== searchColor)
+                continue
+              if (canMovePiece(boardState, pos, dst, /*checkTurn=*/false))
+              {
+                Object.assign(src, pos)
+                return src
+              }
+            }
+          }
+        } else if (src.x === -1 && src.y !== -1) {
+          for (let x = 0; x < 8; ++x) {
+            const pos = {x,y:src.y}
+            const [type,color] = boardState.getElement(pos)
+            if (type !== searchType || color !== searchColor)
+              continue
+
+            if (canMovePiece(boardState, pos, dst, /*checkTurn=*/false))
+            {
+              Object.assign(src, pos)
+              return src
+            }
+          }
+        } else if (src.x !== -1 && src.y === -1) {
+          for (let y = 0; y < 8; ++y) {
+            const pos = {x:src.x,y}
+            const [type,color] = boardState.getElement(pos)
+            if (type !== searchType || color !== searchColor)
+              continue
+
+            if (canMovePiece(boardState, pos, dst,  /*checkTurn=*/false))
+            {
+              Object.assign(src, pos)
+              return src
+            }
+          }
+        }
+        return src
+      }
+
+      /**
+       * Returns a move object given the Standard Algebric Notation(SAN)
+       */
+      function computeMoveForSAN(notation, color, boardState)
+      {
+        if (notation === "O-O") {
+          if (color === "black")
+            return {src:{x:4,y:7},dst:{x:6,y:7}, checkMate:false, takes:false}
+          else if (color === "white")
+            return {src:{x:4,y:0},dst:{x:6,y:0}, checkMate:false, takes:false}
+        } else if (notation === "O-O-O") {
+          if (color === "black")
+            return {src:{x:4,y:7},dst:{x:2,y:7}, checkMate:false, takes:false}
+          else if (color === "white")
+            return {src:{x:4,y:0},dst:{x:2,y:0}, checkMate:false, takes:false}
+        }
+
+        let typeLetter = notation[0]
+        const types="PNBRQK"
+        let type
+        if (types.includes(typeLetter)) {
+          type = _letterTypes[typeLetter]
+        } else {
+          type = "pawn"
+          typeLetter = ""
+        }
+        const src = {x:-1, y:-1}
+        const dst = {x:-1, y:-1}
+        const columns = "abcdefgh"
+        const rows = "12345678"
+
+        let c = notation[notation.length-1]
+        const checkMate = (c === "#")
+        const check = checkMate || (c === "+")
+        let i = notation.length-1
+        let promote= null
+        while (!rows.includes(notation[i])) {
+          if (type==="pawn" && types.includes(notation[i]) && notation[i-1]==="=") {
+            promote=_letterTypes[notation[i]]
+          }
+          --i
+        }
+        let takes = null , _
+        let k = null
+        dst.y = rows.indexOf(notation[i])
+        dst.x = columns.indexOf(notation[i-1])
+
+        const sub1 = notation.substring(0, i-1)
+        if (sub1 === typeLetter) {
+          findSourcePositionForTypeAttackingPosition(boardState, type, color, src, dst)
+
+
+        } else if (notation[i-2] === "x") {
+          ;[takes,_] = boardState.getElement(dst)
+          const sub = notation.substring(Math.max(0,i-4), i-2)
+          parseOptionalSource(sub, src)
+          findSourcePositionForTypeAttackingPosition(boardState, type, color, src, dst)
+        } else {
+          const sub = notation.substring(Math.max(0,i-3), i-1)
+          parseOptionalSource(sub, src)
+          findSourcePositionForTypeAttackingPosition(boardState, type, color, src, dst)
+        }
+        return {src,dst,check,checkMate,takes,promote}
+      }
+
+      function loadPgnFile(body) {
+        const tokens = tokenize(body)
+        let inTagPair = false
+        let currentMoveNumber = null
+        let seenPeriodCount =  0
+        let nextIsBlack = false
+        const boardState = new BoardState()
+        let currentSymbol
+        boardState.initializeBoard()
+        setBoardState(boardState)
+
+        for (let token of tokens) {
+          if (token.type === "opening-bracket") {
+            inTagPair = true
+          } else if (inTagPair && token.type === "closing-bracket") {
+            inTagPair = false
+          } else if (inTagPair) {
+            if (token.type === "symbol") {
+              currentSymbol = token.value
+            } else if (token.type==="string" ) {
+              if (currentSymbol === "Black")
+                boardState.blackPlayer = token.value
+              else if (currentSymbol === "White")
+                boardState.whitePlayer = token.value
+            }
+          } else if (!inTagPair) {
+            if (token.type !== "period") {
+              if (seenPeriodCount === 3)
+                nextIsBlack  = true
+              seenPeriodCount = 0
+            }
+
+            if (token.type === "period") {
+              seenPeriodCount++
+            } else if (token.type === "integer" ) {
+              currentMoveNumber = token.value
+            } else if (token.type === "star") {
+              boardState.result = "*"
+              updateBoardInformation(boardState)
+
+              break
+            } else if (token.type === "symbol") {
+              if (token.value === "1-0"
+                  || token.value === "0-1"
+                  || token.value === "1/2-1/2"
+                 )
+              {
+                boardState.finished = true
+                boardState.result = token.value
+                updateBoardInformation(boardState)
+                break
+              }
+
+              const color = nextIsBlack ? "black":"white"
+              const move = computeMoveForSAN(token.value, color, boardState)
+              movePiece(boardState, move)
+              nextIsBlack = !nextIsBlack
+            }
+          }
+        }
+        drawBoard("#board", true, boardState)
+      }
+
+      function hideAuthorizedPosition()
+      {
+        const dots = document.body.querySelectorAll(".position-dot")
+        for (const el of dots) {
+          el.remove()
+        }
+        const crosses = document.body.querySelectorAll(".position-cross")
+        for (const el of crosses) {
+          el.remove()
+        }
+      }
+
+      const _translations = {
+        "fr": {
+          "white": "Les blancs",
+          "black": "Les noirs",
+          "king": "roi",
+          "queen": "dame",
+          "bishop": "fou",
+          "knight": "cavalier",
+          "rook": "tour",
+          "pawn": "pion",
+          "checkmate": "échec et mat",
+          " wins by checkmate": " gagnent par échec et mat",
+          "check": "échec",
+          " is stalemated": " sont pat",
+        }
+      }
+      const _currentLang = (function(){
+        const lang = navigator.language
+        let t = _translations[lang]
+        if (!t)
+          t = _translations[lang.substring(0,2)]
+        return t
+      }())
+
+      /**
+       * translate function
+       */
+      function T(value)
+      {
+        return _currentLang ? (_currentLang[value] || value) : value
+      }
+
+      function showAuthorizedMovesFor(boardState, src)
+      {
+        const allowedMoves = boardState.getBasicMoves(src)
+        for (const dst of allowedMoves) {
+          if (canMovePiece(boardState, src, dst))
+          {
+            const [type,color] = boardState.getElement(dst)
+            if (type === "empty") {
+              const dot = document.createElement("div")
+              dot.classList.add("position-dot")
+              const id = "abcdefgh".charAt(dst.x)+(dst.y+1)
+              const square = document.getElementById(id)
+              square.prepend(dot)
+            } else {
+              const dot = document.createElement("div")
+              dot.classList.add("position-cross")
+              const id = "abcdefgh".charAt(dst.x)+(dst.y+1)
+              const square = document.getElementById(id)
+              square.prepend(dot)
+            }
+          }
+        }
+      }
+
+      function swapBoard() {
+        whiteAtBottom = !whiteAtBottom
+        drawBoard("#board", whiteAtBottom, boardState)
+      }
+
+      function reinitBoard() {
+        boardState.initializeBoard()
+        drawBoard("#board", whiteAtBottom, boardState)
+      }
+
+      function findKing(boardState, searchColor)
+      {
+        for (let y = 0; y < 8; ++y){
+          for (let x = 0; x < 8; ++x) {
+            const pos = {x,y}
+            const [type,color] = boardState.getElement(pos)
+            if (type === "king" && color === searchColor)  {
+              return pos
+            }
+          }
+        }
+        return null
+      }
+
+      function getOtherColor(color)
+      {
+        if (color === "white")
+          return "black"
+        else
+          return "white"
+      }
+
+      function horizontalLineIsEmptyBetween(boardState, y, srcX, dstX)
+      {
+        const m = Math.min(srcX, dstX)
+        const M = Math.max(srcX, dstX)
+        for (let x = m+1; x < M; ++x) {
+          const [type,_] = boardState.getElement({x,y})
+          if (type !== "empty") {
+            return false
+          }
+        }
+        return true
+      }
+
+      const _typeLetters = {
+        "king":"K",
+        "queen":"Q",
+        "knight":"N",
+        "bishop":"B",
+        "rook":"R",
+        "pawn":"",
+      }
+      const _letterTypes = {
+        "K":"king",
+        "Q":"queen",
+        "N":"knight",
+        "B":"bishop",
+        "R":"rook",
+        "P":"pawn",
+        "":"pawn",
+      }
+
+      function getLetterForType(type) {
+        return _typeLetters[type]
+      }
+
+      function canKingCastle(boardState, src, dst)
+      {
+        const [type,color] = boardState.getElement(src)
+        if (type !== "king")
+          throw new Error("programming error")
+        const side = dst.x > 4 ? "king" : "queen"
+        if (boardState.kingHasMoved[color]
+            || boardState.rookHasMoved[side][color])
+        {
+          return false
+        }
+
+        const y = color === "white" ? 0 : 7 // king and rook row
+        const rookX = side === "queen" ? 0 : 7
+        if (!horizontalLineIsEmptyBetween(boardState, y, 4, rookX))
+        {
+          return false
+        }
+        const [xMin,xMax] = (side === "king") ? [4,6] : [2,4]
+        const otherColor = getOtherColor(color)
+        for (let i = xMin; i <= xMax; ++i) {
+          if (boardState.isAttackedBy(otherColor, {y,x:i}))
+            return false
+        }
+        return true
+      }
+
+      function showSquareAttackedByBoth(color)
+      {
+        for (let y = 0; y < 8; ++y) {
+          for (let x = 0; x < 8; ++x) {
+            const pos = {x,y}
+            if (boardState.isAttackedBy("white", pos)
+                && boardState.isAttackedBy("black", pos))
+            {
+              const id = "abcdefgh".charAt(x)+(y+1)
+              const square = document.getElementById(id)
+              const redBackground = document.createElement("div")
+              redBackground.classList.add("attacked")
+              square.prepend(redBackground)
+            }
+          }
+        }
+      }
+
+      function showSquareAttackedBy(color)
+      {
+        for (let y = 0; y < 8; ++y) {
+          for (let x = 0; x < 8; ++x) {
+            const pos = {x,y}
+            if (boardState.isAttackedBy(color, pos))
+            {
+              const id = "abcdefgh".charAt(x)+(y+1)
+              const square = document.getElementById(id)
+              const redBackground = document.createElement("div")
+              redBackground.classList.add("attacked")
+              square.prepend(redBackground)
+            }
+          }
+        }
+      }
+
+      function hideAttack()
+      {
+        const attacked = document.body.querySelectorAll(".attacked")
+        for (const a of attacked) {
+          a.remove()
+        }
+      }
+
+      function isKingChecked(boardState, color) {
+        const kingPos = findKing(boardState, color)
+        if (kingPos === null) {
+          return true // king not found (mean he is dead)
+        }
+        const otherColor = getOtherColor(color)
+        return boardState.isAttackedBy(otherColor, kingPos)
+      }
+
+      function canPlayerMove(boardState, playerColor)
+      {
+        for (let y1 = 0; y1 < 8; ++y1) {
+          for (let x1 = 0; x1 < 8; ++x1) {
+            const src = {x:x1, y:y1}
+            const [type,color] = boardState.getElement(src)
+            if (color === playerColor)
+            {
+              const moves = boardState.getBasicMoves(src)
+              for (const dst of moves)
+              {
+                if (canMovePiece(boardState, src, dst, /*checkTurn*/false))
+                {
+                  return true
+                }
+              }
+            }
+          }
+        }
+        return false
+      }
+
+      function canEnPassant(boardState, src, dst)
+      {
+        const [stype,_] = boardState.getElement(src)
+        return (stype === "pawn"
+                && boardState.canEnPassant
+                && src.y === boardState.enPassantPos.y
+                && Math.abs(src.x - boardState.enPassantPos.x) === 1
+                && dst.x === boardState.enPassantPos.x)
+      }
+
+      function canBasicMove(boardState, src, dst) {
+        const allowedMoves = boardState.getBasicMoves(src)
+        for (const move of allowedMoves) {
+          if (move.x === dst.x && move.y === dst.y) {
+            const [type,color] = boardState.getElement(dst)
+            if (canEnPassant(boardState, src, dst))
+              return true
+            if ((move.mustTake && type === "empty")
+                || (move.cannotTake && type !== "empty")) {
+              return false
+            }
+            if (move.castleOnly && !canKingCastle(boardState, src, dst))
+            {
+              return false
+            }
+            return true
+          }
+        }
+        return false
+      }
+
+      function isKingOkAfterMove(boardState, src, dst, kingColor) {
+        const board = new BoardState()
+        board.copyBoard(boardState)
+        movePiece(board, {src,dst}, false)
+        return !isKingChecked(board, kingColor)
+      }
+
+      function canMovePiece(boardState, src, dst, checkTurn=true) {
+        const [typeS,colorS] = boardState.getElement(src)
+        const [typeT,colorT] = boardState.getElement(dst)
+        if (boardState.finished) {
+          return false
+        }
+        if (checkTurn && colorS !== boardState.nextColorToPlay) {
+          return false
+        }
+        if (canBasicMove(boardState, src, dst)) {
+          return isKingOkAfterMove(boardState, src, dst, colorS)
+        }
+        return false
+      }
+
+      // this function must return empty string is the move
+      // cannot be ambiguous in Standard Algebric Notation(SAN)
+      // while only specifying destination square
+      // otherwise should specifiy
+      // enough information to disambiguate the move
+      // (prefer the column only,
+      // if not possible,then the row only,
+      // if not possible the both row and columns )
+      function getPotentialSourceForSANMove(boardState, move)
+      {
+        const {src,dst} = move
+        const [moveType, moveColor] = boardState.getElement(src)
+        if (moveType === "pawn")
+          return ""
+
+        let ambiguity = false
+        let needRow = false
+        let needColumn = false
+
+        for (let x = 0; x < 8; ++x) {
+          for (let y = 0; y < 8; ++y) {
+            if (x === src.x && y === src.y) {
+              continue
+            }
+            const pos = {x,y}
+            const [type,color] = boardState.getElement(pos)
+            if (type !== moveType || color !== moveColor) {
+              continue
+            }
+            if (!canMovePiece(boardState, pos, dst))
+              continue
+            ambiguity = true
+            if (pos.y === src.y)
+            {
+              // there is a least a second of same type on the same row
+              // that can attack same target
+              // then we definitely need column
+              needColumn = true
+            }
+
+            if (pos.x === src.x)
+            {
+              // there is a least a second of same type and same column
+              // that can attack same target
+              // then we definitely need row
+              needRow = true
+            }
+          }
+        }
+
+        if (ambiguity && !(needRow || needColumn))
+        {
+          needColumn = true
+        }
+
+        let srcPos = ""
+        if (needColumn)
+        {
+          srcPos += "abcdefgh".charAt(src.x)
+        }
+
+        if (needRow)
+        {
+          srcPos += ""+(src.y+1)
+        }
+        return srcPos
+      }
+
+      // this function assumes the move src -> dst is legal
+      function shouldPresentPromoteDialog(boardState, src, dst)
+      {
+        const [type,color] = boardState.getElement(src)
+        return type === "pawn" && (dst.y === 0 || dst.y === 7);
+      }
+
+      function updateGameState(boardState, color, move, moveInfo)
+      {
+        const otherColor = getOtherColor(color)
+        const canMove = canPlayerMove(boardState, otherColor)
+
+        moveInfo.checked = isKingChecked(boardState, otherColor)
+        moveInfo.checkmate = moveInfo.checked && !canMove
+
+        boardState.finished = !canMove
+        // game status
+        if (moveInfo.checkmate) {
+          boardState.winner = color
+          boardState.result = color === "white" ? "1-0" : "0-1"
+          boardState.Termination = T(color) + T(" wins by checkmate")
+        } else if (moveInfo.checked) {
+          boardState.result = "*"
+        } else if (!canMove) {
+          boardState.winner = ""
+          boardState.result = "1/2-1/2"
+          boardState.Termination = T(otherColor)+T(" is stalemated")
+        }
+
+        updateGameHistory(boardState, move, moveInfo)
+
+        boardState.nextColorToPlay = getOtherColor(boardState.nextColorToPlay)
+        if (boardState.nextColorToPlay === "white") {
+          boardState.moveNumber += 1
+
+          if (moveInfo.takePiece) {
+            boardState.moveCountWithoutTake = 0
+          } else {
+            boardState.moveCountWithoutTake += 1
+          }
+        }
+
+        if (boardState.moveCountWithoutTake >= 50) {
+          boardState.finished = true
+          boardState.winner = ""
+          boardState.result = "1/2-1/2"
+          boardState.Termination = T("50 moves without takes")
+        }
+      }
+
+      function updateGameHistory(boardState, move, moveInfo)
+      {
+        const {src,dst} = move
+        let gameMove = null
+        if (moveInfo.castling) {
+          gameMove = (move.dst.x === 6) ?  "O-O" : "O-O-O"
+        }
+
+        if (gameMove === null) {
+          gameMove = (getLetterForType(moveInfo.type)
+                      + moveInfo.potentialSource
+                      + (moveInfo.takePiece ? "x" :"")
+                      +"abcdefgh".charAt(dst.x)
+                      + (dst.y+1))
+          if (moveInfo.takePiece && moveInfo.type === "pawn") {
+            gameMove = "abcdefgh".charAt(src.x) + gameMove
+          }
+          if (moveInfo.mustPromote) {
+            gameMove += "="+_typeLetters[moveInfo.promote]
+          }
+        }
+
+        if (moveInfo.checkmate) {
+          gameMove = gameMove+"#"
+        } else if (moveInfo.checked) {
+          gameMove = gameMove+"+"
+        }
+
+        // game history
+        if (boardState.nextColorToPlay === "white") {
+          const q = []
+          q.push({
+            move:"",
+            takes: null,
+            check: null,
+            checkmate: null,
+            promote: null,
+          })
+          q.push({
+            move:"",
+            takes: null,
+            check: null,
+            checkmate: null,
+            promote: null,
+          })
+          boardState.moveHistory.push(q)
+        }
+        const last = boardState.moveHistory[boardState.moveHistory.length-1]
+        const id = moveInfo.color==="white" ? 0 : 1
+        const halfMove = last[id]
+        halfMove.move = gameMove
+        halfMove.takes = moveInfo.takePiece
+        halfMove.check = moveInfo.checked
+        halfMove.checkmate = moveInfo.checkmate
+      }
+
+      function handleCastling(boardState, src, dst, moveInfo, type, color, moves)
+      {
+        moveInfo.castling = false
+        if (type === "king")
+        {
+          boardState.kingHasMoved[color] = true
+
+          // Detect castling
+          if (src.y === dst.y
+              && (src.y === 0 || src.y === 7)
+              && src.x === 4
+              && (dst.x === 2 || dst.x === 6))
+          {
+            const side = dst.x===2 ? "queen" : "king"
+            const rookCol = side === "queen" ? 0 : 7
+            const rookDstCol = side === "queen" ? 3 : 5
+            const srcRook = {y: src.y, x: rookCol}
+            const dstRook = {y: src.y, x: rookDstCol}
+
+            moveInfo.castling = true
+
+            boardState.setElement(srcRook, "empty")
+            boardState.setElement(dstRook, "rook", color)
+
+            const srcId = "abcdefgh".charAt(srcRook.x)+(srcRook.y+1)
+            const dstId = "abcdefgh".charAt(dstRook.x)+(dstRook.y+1)
+            moves.push([srcId, dstId, false, null])
+
+          }
+        } else if (type === "rook" && (src.x === 0|| src.x === 7)) {
+          const side = src.x === 0 ? "queen" : "king"
+          boardState.rookHasMoved[side][color] = true
+        }
+      }
+
+      function handleEnPassant(boardState, src, dst, moveInfo, type, color, moves)
+      {
+        // Detect "en passant"
+        moveInfo.enPassant = false
+        if (type === "pawn"
+            && Math.abs(src.x-dst.x) === 1
+            && ((dst.y === 2 && color === "black")
+                || (dst.y === 5 && color === "white"))
+            && boardState.canEnPassant
+            && boardState.enPassantPos.x === dst.x
+            && Math.abs(boardState.enPassantPos.y-dst.y) === 1 )
+        {
+          boardState.setElement({y:src.y, x:dst.x}, "empty")
+          moveInfo.enPassant = true
+          moveInfo.takePiece = "pawn"
+
+          // HACKITY HACK: we actually
+          // make the pawn go back in the UI
+          // so the pawn is removed by the pawn overwriting it
+          // the same way as all regular takes
+          const srcId = "abcdefgh".charAt(dst.x)+(src.y+1)
+          const dstId = "abcdefgh".charAt(dst.x)+(dst.y+1)
+          moves.unshift([srcId, dstId, false, null])
+        }
+
+        if (type === "pawn"
+            && ((src.y === 1 && dst.y === 3)
+                || (src.y === 6 && dst.y === 4)))
+        { // state to allow en passant correctly
+          boardState.canEnPassant = true
+          boardState.enPassantPos.x = dst.x
+          boardState.enPassantPos.y = dst.y
+        }
+        else
+        {
+          boardState.canEnPassant = false
+          boardState.enPassantPos.x = -999
+          boardState.enPassantPos.y = -999
+        }
+      }
+
+      // This function assumes the move src -> dst is legal.
+      // The move src -> dst must have been verified with the
+      // canMovePiece() function before calling this function
+      function movePiece(boardState, move, global=true)
+      {
+        const {src, dst, promote} = move
+        const moveInfo = {}
+        const [type,color] = boardState.getElement(src)
+        const [dtype,_] = boardState.getElement(dst)
+        moveInfo.type = type
+        moveInfo.color = color
+
+        let newType = type
+        moveInfo.mustPromote = false
+        moveInfo.promote = promote
+        if (type === "pawn" && (dst.y === 7 || dst.y === 0)) {
+          newType = promote+","+color
+          moveInfo.mustPromote = true
+        }
+
+        const moves = [] // ui moves
+        const srcId = "abcdefgh".charAt(src.x)+(src.y+1)
+        const dstId = "abcdefgh".charAt(dst.x)+(dst.y+1)
+
+        moves.push([srcId, dstId, moveInfo.mustPromote, promote])
+        moveInfo.takePiece = dtype !== "empty" ? dtype : null
+
+        handleCastling(boardState, src, dst, moveInfo, type, color, moves)
+        handleEnPassant(boardState, src, dst, moveInfo, type, color, moves)
+
+        if (global && !moveInfo.castling)
+        {
+          moveInfo.potentialSource = getPotentialSourceForSANMove(boardState, move)
+        }
+
+        boardState.setElement(dst, newType, color)
+        boardState.setElement(src, "empty")
+        boardState.resetBasicMoves()
+
+        if (global)
+        {
+          updateGameState(boardState, color, move, moveInfo)
+        }
+        return moves
+      }
+
+      function rowToRowNumber(row, whiteAtBottom) {
+        return whiteAtBottom ? (7 - row) : row
+      }
+
+      function colToColNumber(col, whiteAtBottom=false) {
+        return whiteAtBottom ? col : (7 - col)
+      }
+
+      function drawLetterIn(square, letter) {
+        const t = document.createElement("div")
+        t.innerHTML = ""+letter
+        t.classList.add("label", "column")
+        square.append(t)
+      }
+
+      function drawRowNumberIn(square, rankNumber) {
+        const t = document.createElement("div")
+        t.innerHTML = ""+rankNumber
+        t.classList.add("label", "row")
+        square.append(t)
+      }
+
+      function clearAllChilds(node) {
+        while(node.firstChild) {
+          node.removeChild(node.firstChild)
+        }
+      }
+
+      function updatePieceDraggability(boardState) {
+        const white = document.body.querySelectorAll(".piece.white")
+        const black = document.body.querySelectorAll(".piece.black")
+        const nextWhite = boardState.nextColorToPlay === "white"
+        const next = nextWhite ? white : black
+        const prev = nextWhite ? black : white
+
+        for (const el of next) {
+          el.draggable = true
+          el.classList.add("draggablec")
+        }
+        for (const el of prev) {
+          el.draggable = false
+          el.classList.remove("draggablec")
+        }
+      }
+
+      function drawBoard(selector, whiteBottom=true, boardState) {
+
+        const board = document.querySelector(selector)
+        clearAllChilds(board)
+        updateBoardInformation(boardState)
+
+        const dragState = {
+          sourceSquare: null,
+          sourcePiece: null,
+          sourcePos: null,
+          rect: null,
+          effect: null,
+        }
+
+        for (let row = 0; row < 8; ++row) {
+          const y = rowToRowNumber(row, whiteBottom)
+          let squareColor = row % 2
+          for (let col = 0; col < 8; ++col) {
+            const x = colToColNumber(col, whiteBottom)
+            const [type,color] = boardState.getElement({x,y})
+            squareColor = 1 - squareColor
+
+            const file = "abcdefgh".charAt(x)
+            const rank = y+1
+
+            const square = document.createElement("div")
+            if (col === 0) drawRowNumberIn(square, rank)
+            if (row === 7) drawLetterIn(square, file)
+
+            square.classList.add("square")
+            square.classList.add(squareColor === 1 ? "white" : "black")
+            square.setAttribute("data-col", x)
+            square.setAttribute("data-row", y)
+            square.id = ""+file+rank
+
+            if (type !== "empty") {
+              const piece = document.createElement("div")
+              piece.classList.add("piece", type, color)
+              piece.draggable = true
+              piece.id = color+"-"+type+"-"+file
+
+              setupPieceDragEventsListeners(piece, dragState, boardState)
+              square.append(piece)
+            }
+            setupSquareDragEventsListeners(square, dragState, boardState)
+            board.append(square)
+          }
+        }
+        updatePieceDraggability(boardState)
+      }
+
+      class BoardState {
+        constructor() {
+          this.squares = []
+          this.basicMoves = []
+          this.attackedBy = {"white": [], "black": []}
+          for (let i = 0; i < 8*8; ++i ) {
+            this.squares.push("")
+            this.basicMoves.push(null)
+            this.attackedBy["white"].push(false)
+            this.attackedBy["black"].push(false)
+          }
+        }
+
+        isAttackedBy(color, pos) {
+          return this.attackedBy[color][pos.y*8+pos.x]
+        }
+        setIsAttackedBy(color, pos, value) {
+          this.attackedBy[color][pos.y*8+pos.x] = value
+        }
+
+        getElement(pos) {
+          return this.squares[pos.y*8+pos.x].split(",")
+        }
+        setElement(pos, type, color) {
+          const value = (type !== "empty") ? (type+","+color) : type
+          return this.squares[pos.y*8+pos.x] = value
+        }
+
+        getBasicMoves(pos) {
+          let moves = this.basicMoves[pos.y*8+pos.x]
+          if (moves === null) {
+            const [type,color] = this.getElement(pos)
+            moves = generateMoves(this, type, color, pos)
+            this.setBasicMoves(pos, moves)
+          }
+          return moves
+        }
+        setBasicMoves(pos, value) {
+          return this.basicMoves[pos.y*8+pos.x] = value
+        }
+
+        resetBasicMoves() {
+          for (let x = 0; x < 8; ++x) {
+            for (let y = 0; y < 8; ++y) {
+              const pos = {x,y}
+              const [type,color] = this.getElement(pos)
+              if (type !== "empty")
+                this.setBasicMoves(pos, generateMoves(this, type, color, pos))
+            }
+          }
+
+          for (let x = 0; x < 8; ++x) {
+            for (let y = 0; y < 8; ++y) {
+              const pos = {x,y}
+              this.setIsAttackedBy("white", pos, false)
+              this.setIsAttackedBy("black", pos, false)
+            }
+          }
+          for (let x = 0; x < 8; ++x) {
+            for (let y = 0; y < 8; ++y) {
+              const pos = {x,y}
+              const [type,color] = this.getElement(pos)
+              if (type !== "empty") {
+                const moves = this.getBasicMoves(pos)
+                for (const move of moves) {
+                  if (!move.cannotTake)
+                    this.setIsAttackedBy(color, move, true)
+                }
+              }
+            }
+          }
+        }
+
+        copyBoard(board) {
+          if (board === this) {
+            return
+          }
+
+          this.result = board.result
+          this.whitePlayer = board.whitePlayer
+          this.blackPlayer = board.blackPlayer
+
+          this.kingHasMoved = JSON.parse(JSON.stringify(board.kingHasMoved))
+          this.rookHasMoved = JSON.parse(JSON.stringify(board.rookHasMoved))
+          this.moveHistory = JSON.parse(JSON.stringify(board.moveHistory))
+          this.enPassantPos = JSON.parse(JSON.stringify(board.enPassantPos))
+          this.canEnPassant = board.canEnPassant
+          this.nextColorToPlay = board.nextColorToPlay
+          this.moveNumber = board.moveNumber
+          this.moveCountWithoutTake = board.moveCountWithoutTake
+
+          for (let x = 0; x < 8; ++x) {
+            for (let y = 0; y < 8; ++y) {
+              const pos = {x,y}
+              const [type,color] = board.getElement(pos)
+              this.setElement(pos, type, color)
+
+              const moves = board.getBasicMoves(pos)
+              this.setBasicMoves(pos, moves)
+            }
+          }
+        }
+
+        initializeBoard() {
+          this.result = "*"
+          this.finished = false
+          this.Termination = ""
+          this.whitePlayer = "Player 1"
+          this.blackPlayer = "Player 2"
+
+          this.kingHasMoved = { black: false, white: false }
+          this.rookHasMoved = {
+            "king": { black: false, white: false },
+            "queen": { black: false, white: false },
+          }
+          this.canEnPassant = false
+          this.enPassantPos = {x: -999, y: -999}
+          this.nextColorToPlay = "white"
+          this.moveNumber = 1
+          this.moveCountWithoutTake = 0
+          this.moveHistory = []
+
+          const pieces = ["rook","knight","bishop","queen",
+                          "king","bishop","knight","rook"]
+          for (let y = 0; y < 8; ++y) {
+            const color = y < 4 ? "white" : "black"
+            for (let x = 0; x < 8; ++x) {
+              const pos = {x,y}
+              if (y === 0 || y === 7) {
+                this.setElement(pos, pieces[x], color)
+              } else if (y === 1 || y === 6) {
+                this.setElement(pos, "pawn", color)
+              } else {
+                this.setElement(pos, "empty")
+              }
+            }
+          }
+
+          this.resetBasicMoves()
+        }
+      }
+
+      let whiteAtBottom = true
+      let boardState
+      function setBoardState(state) { boardState = state }
+      setBoardState(new BoardState())
+      boardState.initializeBoard()
+        drawBoard("#board", whiteAtBottom, boardState)
+
+        return {
+          openPgnFile,
+          exportHistoryPgnFile,
+          hideAttack,
+          showSquareAttackedBy,
+          showSquareAttackedByBoth,
+          swapBoard,
+          reinitBoard,
+        }
+      })()
+    </script>
+  </body>
+</html>
